@@ -10,6 +10,7 @@ A small native macOS clipboard manager. Copy several things, open your history b
 
 - Up to 100 distinct recent copies, grouped by tens.
 - Selecting a copy moves it to the top.
+- Text pastes as plain text, with rich-text and HTML formatting removed.
 - Text, rich text, links, images, PDFs, and file references.
 - Local history survives restarts.
 - Menu bar app with optional launch at login.

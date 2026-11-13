@@ -4,6 +4,29 @@ import os.log
 struct Clip: Codable, Equatable {
     struct Item: Codable, Equatable {
         let representations: [String: Data]
+
+        var plainText: String? {
+            // File copies must retain their file references.
+            guard representations[NSPasteboard.PasteboardType.fileURL.rawValue] == nil else { return nil }
+            if let data = representations[NSPasteboard.PasteboardType.string.rawValue],
+               let text = String(data: data, encoding: .utf8) {
+                return text
+            }
+            for (type, format) in [
+                (NSPasteboard.PasteboardType.rtf, NSAttributedString.DocumentType.rtf),
+                (.rtfd, .rtfd),
+                (.html, .html)
+            ] {
+                if let data = representations[type.rawValue],
+                   let text = try? NSAttributedString(
+                       data: data, options: [.documentType: format], documentAttributes: nil
+                   ) {
+                    return text.string
+                }
+            }
+            return representations[NSPasteboard.PasteboardType.URL.rawValue]
+                .flatMap { String(data: $0, encoding: .utf8) }
+        }
     }
 
     let items: [Item]
@@ -65,8 +88,12 @@ struct Clip: Codable, Equatable {
     func write(to pasteboard: NSPasteboard) -> Bool {
         let objects = items.map { item -> NSPasteboardItem in
             let object = NSPasteboardItem()
-            for (type, data) in item.representations {
-                object.setData(data, forType: NSPasteboard.PasteboardType(type))
+            if let text = item.plainText {
+                object.setString(text, forType: .string)
+            } else {
+                for (type, data) in item.representations {
+                    object.setData(data, forType: NSPasteboard.PasteboardType(type))
+                }
             }
             return object
         }
