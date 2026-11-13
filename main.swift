@@ -11,6 +11,8 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeys: [EventHotKeyRef] = []
     private var eventHandler: EventHandlerRef?
     private var target: NSRunningApplication?
+    private var checkingUpdate = false
+    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
 
     override init() {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -108,6 +110,9 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let login = command("Open at Login", #selector(toggleLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        command("About CopyShelf…", #selector(about))
+        let update = command("Check for Updates…", #selector(checkForUpdates))
+        update.isEnabled = !checkingUpdate
         command("Quit CopyShelf", #selector(quit))
     }
 
@@ -196,6 +201,55 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             NSAlert(error: error).runModal()
         }
+    }
+
+    @objc private func about() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "CopyShelf",
+            .applicationVersion: version,
+            .credits: NSAttributedString(string: "A small, open-source clipboard manager.\nMIT License · Roy Sadaka"),
+            .applicationIcon: NSImage(named: "AppIcon") ?? NSImage()
+        ])
+    }
+
+    @objc private func checkForUpdates() {
+        guard !checkingUpdate else { return }
+        checkingUpdate = true
+        var request = URLRequest(url: URL(string: "https://api.github.com/repos/RoySadaka/CopyShelf/releases/latest")!)
+        request.timeoutInterval = 20
+        request.setValue("CopyShelf/" + version, forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let status = (response as? HTTPURLResponse)?.statusCode
+            let release = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let tag = release?["tag_name"] as? String
+            DispatchQueue.main.async {
+                self.checkingUpdate = false
+                let alert = NSAlert()
+                if error == nil, status == 200, let tag = tag {
+                    let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+                    if latest.compare(self.version, options: .numeric) == .orderedDescending {
+                        alert.messageText = "CopyShelf \(latest) is available"
+                        alert.informativeText = "You have version \(self.version). Download the new disk image, quit CopyShelf, and drag the updated app into Applications."
+                        alert.addButton(withTitle: "Open Download")
+                        alert.addButton(withTitle: "Later")
+                        NSApp.activate(ignoringOtherApps: true)
+                        if alert.runModal() == .alertFirstButtonReturn {
+                            NSWorkspace.shared.open(URL(string: "https://github.com/RoySadaka/CopyShelf/releases/latest")!)
+                        }
+                        return
+                    }
+                    alert.messageText = "CopyShelf is up to date"
+                    alert.informativeText = "You’re running version \(self.version)."
+                } else {
+                    alert.messageText = "Couldn’t check for updates"
+                    alert.informativeText = error?.localizedDescription ?? "GitHub returned an unexpected response. Please try again later."
+                }
+                alert.addButton(withTitle: "OK")
+                NSApp.activate(ignoringOtherApps: true)
+                alert.runModal()
+            }
+        }.resume()
     }
 
     @objc private func quit() {
