@@ -84,7 +84,10 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard menu === self.menu else { return }
-        target = NSWorkspace.shared.frontmostApplication
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.processIdentifier != NSRunningApplication.current.processIdentifier {
+            target = front
+        }
         monitor.captureIfChanged()
         menu.removeAllItems()
 
@@ -102,7 +105,7 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        if !CGPreflightPostEventAccess() {
+        if !AXIsProcessTrusted() {
             command("Enable Automatic Paste…", #selector(enableAutomaticPaste))
         }
         if !clips.isEmpty {
@@ -155,23 +158,40 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func paste(_ sender: NSMenuItem) {
         guard let clip = sender.representedObject as? Clip, monitor.restore(clip) else { return }
-        guard CGPreflightPostEventAccess(), let destination = target,
+        guard AXIsProcessTrusted() else {
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "Allow CopyShelf to paste"
+                alert.informativeText = "The selected text is on your clipboard. macOS has not authorized this copy of the app. Remove CopyShelf from Accessibility, add it again from Applications, and enable it."
+                alert.addButton(withTitle: "Open Accessibility")
+                alert.addButton(withTitle: "Later")
+                NSApp.activate(ignoringOtherApps: true)
+                if alert.runModal() == .alertFirstButtonReturn { self.enableAutomaticPaste() }
+            }
+            return
+        }
+        guard let destination = target,
               destination.processIdentifier != NSRunningApplication.current.processIdentifier else { return }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier,
-                  let down = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
-                  let up = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
-            else { return }
-            down.flags = .maskCommand
-            up.flags = .maskCommand
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == NSRunningApplication.current.processIdentifier {
+                destination.activate(options: .activateIgnoringOtherApps)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier,
+                      let down = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
+                      let up = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
+                else { return }
+                down.flags = .maskCommand
+                up.flags = .maskCommand
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+            }
         }
     }
 
     @objc private func enableAutomaticPaste() {
-        if !CGRequestPostEventAccess() {
+        if !AXIsProcessTrusted() {
             let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
             NSWorkspace.shared.open(settings)
         }
@@ -255,6 +275,11 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func quit() {
         NSApp.terminate(nil)
     }
+}
+
+if CommandLine.arguments.contains("--permission-status") {
+    print("Accessibility: \(AXIsProcessTrusted()); event posting: \(CGPreflightPostEventAccess())")
+    exit(0)
 }
 
 umask(0o077)
