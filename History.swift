@@ -1,13 +1,19 @@
 import AppKit
+import UniformTypeIdentifiers
 import os.log
 
 struct Clip: Codable, Equatable {
     struct Item: Codable, Equatable {
         let representations: [String: Data]
 
+        var hasImage: Bool {
+            representations.keys.contains { UTType($0)?.conforms(to: .image) == true }
+        }
+
         var plainText: String? {
-            // File copies must retain their file references.
-            guard representations[NSPasteboard.PasteboardType.fileURL.rawValue] == nil else { return nil }
+            // Images and file copies retain their original representations.
+            guard !hasImage,
+                  representations[NSPasteboard.PasteboardType.fileURL.rawValue] == nil else { return nil }
             if let data = representations[NSPasteboard.PasteboardType.string.rawValue],
                let text = String(data: data, encoding: .utf8) {
                 return text
@@ -57,7 +63,8 @@ struct Clip: Codable, Equatable {
 
         for item in source {
             var representations: [String: Data] = [:]
-            for type in Self.supportedTypes where item.types.contains(type) {
+            for type in item.types where Self.supportedTypes.contains(type)
+                || UTType(type.rawValue)?.conforms(to: .image) == true {
                 guard let data = item.data(forType: type), !data.isEmpty else { continue }
                 guard data.count <= Self.byteLimit - size else { return nil }
                 representations[type.rawValue] = data
@@ -70,8 +77,7 @@ struct Clip: Codable, Equatable {
             } else {
                 preview = preview ?? item.string(forType: .string) ?? item.string(forType: .URL)
             }
-            hasImage = hasImage || representations[NSPasteboard.PasteboardType.png.rawValue] != nil
-                || representations[NSPasteboard.PasteboardType.tiff.rawValue] != nil
+            hasImage = hasImage || Item(representations: representations).hasImage
             captured.append(Item(representations: representations))
         }
 
@@ -80,7 +86,7 @@ struct Clip: Codable, Equatable {
         byteCount = size
         let line = preview?.split(whereSeparator: \.isWhitespace).prefix(64).joined(separator: " ")
         let label = fileCount > 1 ? "\(fileCount) files" : line.flatMap { $0.isEmpty ? nil : $0 }
-        let display = label ?? (hasImage ? "Image" : "Document")
+        let display = hasImage && fileCount == 0 ? "Image" : (label ?? "Document")
         let excerpt = display.prefix(68)
         title = excerpt.endIndex == display.endIndex ? display : String(excerpt) + "…"
     }
@@ -88,7 +94,11 @@ struct Clip: Codable, Equatable {
     func write(to pasteboard: NSPasteboard) -> Bool {
         let objects = items.map { item -> NSPasteboardItem in
             let object = NSPasteboardItem()
-            if let text = item.plainText {
+            if item.hasImage && item.representations[NSPasteboard.PasteboardType.fileURL.rawValue] == nil {
+                for (type, data) in item.representations where UTType(type)?.conforms(to: .image) == true {
+                    object.setData(data, forType: NSPasteboard.PasteboardType(type))
+                }
+            } else if let text = item.plainText {
                 object.setString(text, forType: .string)
             } else {
                 for (type, data) in item.representations {

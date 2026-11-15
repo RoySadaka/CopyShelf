@@ -59,3 +59,25 @@ precondition(monitor.restore(history.clips[0]))
 precondition(board.string(forType: .fileURL) != nil)
 history.finishSaving()
 print("Passed plain-text restore for saved formatted copies, RTF-only content, and file references.")
+
+// Some image sources include an empty rich-text fallback beside JPEG data.
+let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+    bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
+    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+let jpeg = bitmap.representation(using: .jpeg, properties: [:])!
+let imageItem = NSPasteboardItem()
+let jpegType = NSPasteboard.PasteboardType("public.jpeg")
+imageItem.setData(jpeg, forType: jpegType)
+imageItem.setData(Data("{\\rtf1\\ansi }".utf8), forType: .rtf)
+board.clearContents()
+precondition(board.writeObjects([imageItem]))
+monitor.captureIfChanged()
+precondition(history.clips[0].title == "Image")
+history.finishSaving()
+let savedImage = History(file: file).clips[0]
+precondition(monitor.restore(savedImage))
+precondition(board.data(forType: jpegType) == jpeg)
+precondition(board.string(forType: .string) == nil)
+precondition(NSImage(pasteboard: board) != nil)
+history.finishSaving()
+print("Passed JPEG capture, image labeling, persistence, and image restoration with an RTF fallback.")
