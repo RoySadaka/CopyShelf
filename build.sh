@@ -8,7 +8,7 @@ cp assets/AppIcon.icns "$bundle/Contents/Resources/"
 cp Info.plist "$bundle/Contents/Info.plist"
 for arch in arm64 x86_64; do
     /usr/bin/swiftc -O -target "$arch-apple-macosx13.0" \
-        History.swift main.swift -o "$bundle/Contents/MacOS/CopyShelf-$arch"
+        History.swift QuickLookImage.swift main.swift -o "$bundle/Contents/MacOS/CopyShelf-$arch"
 done
 /usr/bin/lipo -create "$bundle/Contents/MacOS/CopyShelf-arm64" \
     "$bundle/Contents/MacOS/CopyShelf-x86_64" -output "$bundle/Contents/MacOS/CopyShelf"

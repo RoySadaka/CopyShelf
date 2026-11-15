@@ -182,7 +182,11 @@ final class ClipboardMonitor {
     func captureIfChanged() {
         let current = pasteboard.changeCount
         guard current != changeCount else { return }
-        let clip = Clip(pasteboard: pasteboard)
+        var clip = Clip(pasteboard: pasteboard)
+        if pasteboard.name == NSPasteboard.general.name,
+           let copied = clip, let image = QuickLookImage.capture(after: copied) {
+            clip = image
+        }
         guard pasteboard.changeCount == current else { return }
         changeCount = current
         if let clip = clip { history.record(clip) }

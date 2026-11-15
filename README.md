@@ -72,8 +72,10 @@ The app keeps at most 100 items within a 64 MiB history budget and skips individ
 
 Small fixes and focused improvements are welcome. Describe reproduction steps for bugs and explain behavior changes in pull requests. Run `./test.sh` and `./build.sh`, then check the menu and pasting in a native text editor. Use sample clipboard contents for screenshots and bug reports.
 
-The implementation is two Swift files using AppKit. `scripts/icon.swift` regenerates the original icon with `swift scripts/icon.swift`. Source code and icon assets are covered by the [MIT license](LICENSE).
+The implementation uses Swift and AppKit. `scripts/icon.swift` regenerates the original icon with `swift scripts/icon.swift`. Source code and icon assets are covered by the [MIT license](LICENSE).
 
 ## Create a release
 
 Run `./release.sh` to test, build a universal app, and produce a DMG plus SHA-256 checksum in `build/`. Set the version and build number in `Info.plist` before a release. Publish a matching `vX.Y.Z` GitHub release with these files so the update check can find it.
+
+When Finder Quick Look publishes empty text for an image copy, CopyShelf uses Accessibility to identify the matching selected image and saves its original bytes. This fallback requires Accessibility permission and a single unambiguous image matching the visible preview.
