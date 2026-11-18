@@ -186,9 +186,10 @@ final class ClipboardMonitor {
     private let pasteboard: NSPasteboard
     private var changeCount: Int
     let history: History
-    private let recoverImage: () -> Clip?
+    var onFolderAccessDenied: ((String) -> Void)?
+    private let recoverImage: () throws -> Clip?
 
-    init(pasteboard: NSPasteboard, history: History, recoverImage: @escaping () -> Clip? = { nil }) {
+    init(pasteboard: NSPasteboard, history: History, recoverImage: @escaping () throws -> Clip? = { nil }) {
         self.recoverImage = recoverImage
         self.pasteboard = pasteboard
         self.history = history
@@ -199,7 +200,17 @@ final class ClipboardMonitor {
         let current = pasteboard.changeCount
         guard current != changeCount else { return }
         let clip = Clip(pasteboard: pasteboard)
-        let image = clip?.isEmptyRichText == true ? recoverImage() : nil
+        let image: Clip?
+        do {
+            image = clip?.isEmptyRichText == true ? try recoverImage() : nil
+        } catch let denial as QuickLookImage.FolderAccessError {
+            guard pasteboard.changeCount == current else { return }
+            changeCount = current
+            onFolderAccessDenied?(denial.folder)
+            return
+        } catch {
+            image = nil
+        }
         // Finder selection and file reads may take long enough for a newer copy to arrive.
         guard pasteboard.changeCount == current else { return }
         changeCount = current

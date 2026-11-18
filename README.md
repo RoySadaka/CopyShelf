@@ -62,6 +62,8 @@ The menu bar icon also opens history and offers **Clear History**, **Open at Log
 
 If Finder Quick Look copies empty text while previewing an image, CopyShelf uses Accessibility to match the preview to the selected file. It puts the recovered image on the system clipboard so you can paste it with **⌘V** or choose it later from history.
 
+If macOS blocks access to an image in Downloads, Desktop, or Documents, choose **Open Folder Settings** in the alert or the CopyShelf menu. Enable the folder under **CopyShelf**, then copy the image again.
+
 ## Storage and limits
 
 History is stored in `~/Library/Application Support/CopyShelf/history.plist`. Clipboard contents stay on your Mac. The app contacts GitHub only when you choose Check for Updates. Clipboard contents are never included in that request. There are no third-party dependencies.

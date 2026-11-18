@@ -130,3 +130,36 @@ racing.captureIfChanged()
 precondition(history.clips.first?.title == "Newer copy")
 history.finishSaving()
 print("Passed system clipboard image recovery, selected text, and a newer copy during recovery.")
+
+let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+let protectedImage = downloads.appendingPathComponent("Nested/image.png")
+let denied = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError)
+let missing = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoSuchFileError)
+let accessError = QuickLookImage.FolderAccessError(reading: protectedImage, error: denied)!
+precondition(accessError.folder == "Downloads")
+precondition(QuickLookImage.FolderAccessError(reading: protectedImage, error: missing) == nil)
+let sibling = downloads.deletingLastPathComponent().appendingPathComponent("Downloads-backup/image.png")
+precondition(QuickLookImage.FolderAccessError(reading: sibling, error: denied) == nil)
+for dir in [FileManager.SearchPathDirectory.desktopDirectory, .documentDirectory] {
+    let root = FileManager.default.urls(for: dir, in: .userDomainMask)[0]
+    let error = NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM))
+    precondition(QuickLookImage.FolderAccessError(reading: root.appendingPathComponent("pic.jpg"),
+                                                error: error)?.folder == root.lastPathComponent)
+}
+
+let blockedMonitor = ClipboardMonitor(pasteboard: board, history: history) { throw accessError }
+var reported: [String] = []
+blockedMonitor.onFolderAccessDenied = { reported.append($0) }
+writeQuickLookFallback()
+let unchangedBoard = board.changeCount
+let unchangedHistory = history.clips
+blockedMonitor.captureIfChanged()
+blockedMonitor.captureIfChanged()
+precondition(reported == ["Downloads"])
+precondition(board.changeCount == unchangedBoard && history.clips == unchangedHistory)
+
+let fixture = directory.appendingPathComponent("sample.png")
+try png.write(to: fixture)
+let fileImage = try QuickLookImage.readImage(at: fixture)
+precondition(fileImage == expectedImage)
+print("Passed folder denial reporting, unaffected clipboard and history, and normal image reads.")

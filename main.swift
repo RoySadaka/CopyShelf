@@ -11,6 +11,7 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeys: [EventHotKeyRef] = []
     private var eventHandler: EventHandlerRef?
     private var target: NSRunningApplication?
+    private var reportedFolders = Set<String>()
     private var checkingUpdate = false
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
 
@@ -20,6 +21,7 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
         monitor = ClipboardMonitor(pasteboard: .general, history: History(file: historyFile),
                                    recoverImage: QuickLookImage.capture)
         super.init()
+        monitor.onFolderAccessDenied = { [weak self] folder in self?.reportFolderAccess(folder) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -109,6 +111,7 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !AXIsProcessTrusted() {
             command("Enable Automatic Paste…", #selector(enableAutomaticPaste))
         }
+        command("Open Folder Settings…", #selector(openFolderSettings))
         if !clips.isEmpty {
             command("Clear History…", #selector(clearHistory))
         }
@@ -196,6 +199,24 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
             NSWorkspace.shared.open(settings)
         }
+    }
+
+    private func reportFolderAccess(_ folder: String) {
+        guard reportedFolders.insert(folder).inserted else { return }
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "CopyShelf needs access to \(folder) to copy this image."
+            alert.informativeText = "In Files & Folders, expand CopyShelf and enable \(folder) Folder. Then return to Quick Look and press ⌘C again."
+            alert.addButton(withTitle: "Open Folder Settings")
+            alert.addButton(withTitle: "Later")
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn { self.openFolderSettings() }
+        }
+    }
+
+    @objc private func openFolderSettings() {
+        let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")!
+        NSWorkspace.shared.open(settings)
     }
 
     @objc private func clearHistory() {
