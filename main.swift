@@ -17,7 +17,8 @@ final class CopyShelf: NSObject, NSApplicationDelegate, NSMenuDelegate {
     override init() {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let historyFile = folder.appendingPathComponent("CopyShelf/history.plist")
-        monitor = ClipboardMonitor(pasteboard: .general, history: History(file: historyFile))
+        monitor = ClipboardMonitor(pasteboard: .general, history: History(file: historyFile),
+                                   recoverImage: QuickLookImage.capture)
         super.init()
     }
 

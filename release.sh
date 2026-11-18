@@ -9,4 +9,5 @@ trap 'find "$staging" -depth -delete' EXIT
 ditto build/CopyShelf.app "$staging/CopyShelf.app"
 ln -s /Applications "$staging/Applications"
 hdiutil create -volname CopyShelf -srcfolder "$staging" -ov -format UDZO "build/CopyShelf-$version.dmg"
-shasum -a 256 "build/CopyShelf-$version.dmg" > "build/CopyShelf-$version.dmg.sha256"
+cd build
+shasum -a 256 "CopyShelf-$version.dmg" > "CopyShelf-$version.dmg.sha256"

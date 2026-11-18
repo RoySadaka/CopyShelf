@@ -81,3 +81,52 @@ precondition(board.string(forType: .string) == nil)
 precondition(NSImage(pasteboard: board) != nil)
 history.finishSaving()
 print("Passed JPEG capture, image labeling, persistence, and image restoration with an RTF fallback.")
+
+// Reproduce the empty text and RTF flavors published by Finder Quick Look.
+func writeQuickLookFallback() {
+    let item = NSPasteboardItem()
+    item.setData(Data(), forType: .string)
+    item.setData(Data("{\\rtf1\\ansi }".utf8), forType: .rtf)
+    board.clearContents()
+    precondition(board.writeObjects([item]))
+}
+
+let png = bitmap.representation(using: .png, properties: [:])!
+let expectedImage = Clip(image: png, type: .png)
+var recoveries = 0
+let quickLook = ClipboardMonitor(pasteboard: board, history: history) {
+    recoveries += 1
+    return expectedImage
+}
+writeQuickLookFallback()
+quickLook.captureIfChanged()
+// Read the board directly, without selecting or restoring a history entry.
+precondition(NSImage(pasteboard: board) != nil)
+precondition(board.data(forType: .png) == png)
+precondition(board.string(forType: .string) == nil)
+precondition(history.clips.first == expectedImage)
+quickLook.captureIfChanged()
+precondition(recoveries == 1)
+
+let selectedText = NSPasteboardItem()
+selectedText.setString("Text selected in the preview", forType: .string)
+selectedText.setData(Data("{\\rtf1 selected}".utf8), forType: .rtf)
+board.clearContents()
+precondition(board.writeObjects([selectedText]))
+let before = board.changeCount
+quickLook.captureIfChanged()
+precondition(board.changeCount == before && recoveries == 1)
+precondition(history.clips.first?.title == "Text selected in the preview")
+
+let racing = ClipboardMonitor(pasteboard: board, history: history) {
+    board.clearContents()
+    precondition(board.setString("Newer copy", forType: .string))
+    return expectedImage
+}
+writeQuickLookFallback()
+racing.captureIfChanged()
+precondition(board.string(forType: .string) == "Newer copy")
+racing.captureIfChanged()
+precondition(history.clips.first?.title == "Newer copy")
+history.finishSaving()
+print("Passed system clipboard image recovery, selected text, and a newer copy during recovery.")

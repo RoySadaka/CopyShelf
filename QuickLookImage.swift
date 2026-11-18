@@ -4,19 +4,22 @@ import UniformTypeIdentifiers
 enum QuickLookImage {
     // Quick Look's Live Text layer can publish empty text for Command-C.
     // Recover only the single image whose filename matches the visible preview.
-    static func capture(after clip: Clip) -> Clip? {
-        guard clip.items.count == 1, clip.items[0].plainText == "",
-              AXIsProcessTrusted(),
+    static func capture() -> Clip? {
+        guard AXIsProcessTrusted(),
               let finder = NSWorkspace.shared.frontmostApplication,
               finder.bundleIdentifier == "com.apple.finder" else { return nil }
         let application = AXUIElementCreateApplication(finder.processIdentifier)
         AXUIElementSetMessagingTimeout(application, 0.2)
         let windows = attribute(application, kAXWindowsAttribute) as? [AXUIElement] ?? []
         guard let preview = windows.first(where: {
-            attribute($0, kAXTitleAttribute) as? String == "Quick Look"
+            attribute($0, kAXSubroleAttribute) as? String == "Quick Look"
+                || attribute($0, kAXTitleAttribute) as? String == "Quick Look"
         }), let name = previewFilename(preview, depth: 0) else { return nil }
 
-        let candidates = windows.flatMap { selectedURLs($0, depth: 0) }.filter {
+        guard let window = windows.first(where: {
+            attribute($0, kAXMainAttribute) as? Bool == true
+        }) else { return nil }
+        let candidates = selectedURLs(window, depth: 0).filter {
             (try? $0.resourceValues(forKeys: [.nameKey]).name) == name
         }
         let unique = Set(candidates)
@@ -24,16 +27,13 @@ enum QuickLookImage {
               let type = UTType(filenameExtension: name.components(separatedBy: ".").last ?? ""),
               type.conforms(to: .image),
               let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-              size <= 20 * 1024 * 1024,
+              size <= Clip.byteLimit,
               let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: 20 * 1024 * 1024 + 1),
-              data.count <= 20 * 1024 * 1024, NSImage(data: data) != nil else { return nil }
+        guard let data = try? handle.read(upToCount: Clip.byteLimit + 1),
+              data.count <= Clip.byteLimit, NSImage(data: data) != nil else { return nil }
 
-        let scratch = NSPasteboard.withUniqueName()
-        defer { scratch.releaseGlobally() }
-        scratch.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))
-        return Clip(pasteboard: scratch)
+        return Clip(image: data, type: type)
     }
 
     private static func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
@@ -56,8 +56,15 @@ enum QuickLookImage {
 
     private static func selectedURLs(_ element: AXUIElement, depth: Int) -> [URL] {
         guard depth < 8 else { return [] }
-        if let rows = attribute(element, kAXSelectedRowsAttribute) as? [AXUIElement], !rows.isEmpty {
-            return rows.flatMap { fileURLs($0, depth: 0) }
+        for key in [kAXSelectedRowsAttribute, kAXSelectedChildrenAttribute] {
+            guard let selected = attribute(element, key) as? [AXUIElement] else { continue }
+            if selected.count > 1 { return [] }
+            if let single = selected.first {
+                let urls = fileURLs(single, depth: 0)
+                if !urls.isEmpty { return urls }
+            }
+            // A row container can have thousands of unselected children.
+            if key == kAXSelectedRowsAttribute { return [] }
         }
         return (attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? [])
             .flatMap { selectedURLs($0, depth: depth + 1) }

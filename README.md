@@ -60,6 +60,8 @@ Copy normally with **⌘C**. Open history with **⌘⇧V** or **⌃⌘V**. The m
 
 The menu bar icon also opens history and offers **Clear History**, **Open at Login**, and **Quit**. Without Accessibility permission, selection restores the clipboard and you can paste using **⌘V**.
 
+If Finder Quick Look copies empty text while previewing an image, CopyShelf uses Accessibility to match the preview to the selected file. It puts the recovered image on the system clipboard so you can paste it with **⌘V** or choose it later from history.
+
 ## Storage and limits
 
 History is stored in `~/Library/Application Support/CopyShelf/history.plist`. Clipboard contents stay on your Mac. The app contacts GitHub only when you choose Check for Updates. Clipboard contents are never included in that request. There are no third-party dependencies.
@@ -77,5 +79,3 @@ The implementation uses Swift and AppKit. `scripts/icon.swift` regenerates the o
 ## Create a release
 
 Run `./release.sh` to test, build a universal app, and produce a DMG plus SHA-256 checksum in `build/`. Set the version and build number in `Info.plist` before a release. Publish a matching `vX.Y.Z` GitHub release with these files so the update check can find it.
-
-When Finder Quick Look publishes empty text for an image copy, CopyShelf uses Accessibility to identify the matching selected image and saves its original bytes. This fallback requires Accessibility permission and a single unambiguous image matching the visible preview.
